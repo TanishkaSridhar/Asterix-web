@@ -7,11 +7,12 @@ import { JWT_SECRET } from './auth.js';
  * responses, so none of the routes themselves change. Admin views are not
  * touched: the admin portal keeps seeing real figures.
  *
- * To lift the lock, set ATTENDANCE_VIEW_LOCKED=false in the server environment
- * and restart, or remove this middleware's mount line from src/index.js.
+ * To turn the lock on, set ATTENDANCE_VIEW_LOCKED=true in the server environment
+ * and restart. Unset or any other value leaves attendance visible.
  */
 
-export const ATTENDANCE_VIEW_LOCKED = process.env.ATTENDANCE_VIEW_LOCKED !== 'false';
+// Off by default now that the records are final; set ATTENDANCE_VIEW_LOCKED=true to hide attendance again.
+export const ATTENDANCE_VIEW_LOCKED = process.env.ATTENDANCE_VIEW_LOCKED === 'true';
 
 export const ATTENDANCE_VIEW_LOCK = {
     title: 'Attendance viewing is temporarily blocked',
