@@ -2882,6 +2882,179 @@ router.post('/sessions/manual-mark', authenticateToken, async (req, res) => {
     }
 });
 
+/**
+ * GET /api/workshop/attendance/eligibility?threshold=75
+ * Read-only. Every paid participant's attendance per enrolled track, judged
+ * against a threshold the admin picks (default 75). Single-track participants
+ * are judged on their track; combo participants on the average of their two
+ * track percentages, with each track also reported on its own. Uses the same
+ * session matching as the participant profile, so the numbers agree with it.
+ */
+router.get('/eligibility', authenticateToken, async (req, res) => {
+    try {
+        const requested = Number(req.query.threshold);
+        const threshold = Number.isFinite(requested) && requested > 0 && requested <= 100 ? requested : 75;
+
+        const [registrations, sessions, records] = await Promise.all([
+            WorkshopRegistration.find({ status: 'paid' })
+                .select('name rollNo email phone department year package tracksEnrolled')
+                .lean(),
+            WorkshopSession.find({}).lean(),
+            WorkshopAttendance.find({})
+                .select('registrationId rollNo email track sessionId sessionKey sessionDate checkedInAt')
+                .lean()
+        ]);
+
+        // Attach each record to one participant: by registration id, then roll number, then email.
+        const byId = new Map();
+        const byRoll = new Map();
+        const byEmail = new Map();
+        registrations.forEach((reg) => {
+            byId.set(String(reg._id), reg);
+            if (reg.rollNo) byRoll.set(normalizeRollNo(reg.rollNo), reg);
+            if (reg.email) byEmail.set(String(reg.email).toLowerCase().trim(), reg);
+        });
+        const recordsOf = new Map();
+        records.forEach((att) => {
+            const reg = (att.registrationId && byId.get(String(att.registrationId)))
+                || (att.rollNo && byRoll.get(normalizeRollNo(att.rollNo)))
+                || (att.email && byEmail.get(String(att.email).toLowerCase().trim()));
+            if (!reg) return;
+            const key = String(reg._id);
+            if (!recordsOf.has(key)) recordsOf.set(key, []);
+            recordsOf.get(key).push(att);
+        });
+
+        const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const countedByTrack = {};
+        const remainingByTrack = {};
+        TRACK_IDS.forEach((trackId) => {
+            countedByTrack[trackId] = sessions
+                .filter((s) => s.track === trackId && s.countsForAttendance && s.status === 'conducted')
+                .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+            remainingByTrack[trackId] = sessions.filter((s) => s.track === trackId
+                && s.countsForAttendance
+                && s.status === 'scheduled'
+                && (!s.date || s.date >= todayIso)).length;
+        });
+
+        const pct = (present, conducted) => (conducted > 0 ? Math.round((present / conducted) * 1000) / 10 : 0);
+        // Smallest run of sessions attended in a row that lifts present/conducted to the threshold.
+        const sessionsToReach = (present, conducted) => {
+            const t = threshold / 100;
+            if (conducted === 0 || present / conducted >= t) return 0;
+            if (t >= 1) return null;
+            return Math.ceil((t * conducted - present) / (1 - t));
+        };
+
+        const people = registrations.map((reg) => {
+            const tracks = enrolledTracksOf(reg).filter((t) => TRACK_IDS.includes(t));
+            const attendanceRecords = recordsOf.get(String(reg._id)) || [];
+            const { perTrack, presentKeys } = summarizeAttendance({ sessions, attendanceRecords, tracksEnrolled: tracks });
+
+            const trackRows = {};
+            let lastSeen = null;
+            tracks.forEach((trackId) => {
+                const summary = perTrack[trackId];
+                const counted = countedByTrack[trackId];
+                let missedInARow = 0;
+                for (let i = counted.length - 1; i >= 0 && !presentKeys.has(counted[i].sessionKey); i--) missedInARow++;
+                const attended = counted.filter((s) => presentKeys.has(s.sessionKey));
+                const last = attended.length ? attended[attended.length - 1].date : null;
+                if (last && (!lastSeen || last > lastSeen)) lastSeen = last;
+                const remaining = remainingByTrack[trackId];
+                const percentage = pct(summary.totalPresent, summary.totalConducted);
+                trackRows[trackId] = {
+                    present: summary.totalPresent,
+                    conducted: summary.totalConducted,
+                    missed: summary.totalConducted - summary.totalPresent,
+                    percentage,
+                    eligible: summary.totalConducted > 0 && percentage >= threshold,
+                    missedInARow,
+                    lastAttended: last,
+                    sessionsToReach: sessionsToReach(summary.totalPresent, summary.totalConducted),
+                    remaining,
+                    maxPossible: pct(summary.totalPresent + remaining, summary.totalConducted + remaining)
+                };
+            });
+
+            const group = tracks.length > 1 ? 'combo' : tracks[0] || 'software';
+            const rows = Object.values(trackRows);
+            const average = rows.length
+                ? Math.round((rows.reduce((sum, r) => sum + r.percentage, 0) / rows.length) * 10) / 10
+                : 0;
+            const eligibleTracks = tracks.filter((t) => trackRows[t].eligible);
+
+            return {
+                registrationId: String(reg._id),
+                name: reg.name,
+                rollNo: reg.rollNo,
+                email: reg.email,
+                phone: reg.phone,
+                department: reg.department,
+                year: reg.year,
+                group,
+                tracks,
+                perTrack: trackRows,
+                average,
+                eligible: rows.some((r) => r.conducted > 0) && average >= threshold,
+                eligibleTracks,
+                // Combo only: clears the bar on exactly one of the two tracks.
+                split: group === 'combo' && eligibleTracks.length === 1,
+                neverAttended: attendanceRecords.length === 0,
+                lastSeen,
+                // Average of each track's best case if every remaining session is attended.
+                canStillReach: rows.length > 0 && rows.reduce((sum, r) => sum + r.maxPossible, 0) / rows.length >= threshold
+            };
+        });
+
+        const groupSummary = (group) => {
+            const list = people.filter((p) => p.group === group);
+            return {
+                total: list.length,
+                eligible: list.filter((p) => p.eligible).length,
+                below: list.filter((p) => !p.eligible).length,
+                neverAttended: list.filter((p) => p.neverAttended).length,
+                cannotReach: list.filter((p) => !p.eligible && !p.canStillReach).length
+            };
+        };
+        const combo = people.filter((p) => p.group === 'combo');
+        const distribution = [[0, 25], [25, 50], [50, 65], [65, 75], [75, 90], [90, 101]].map(([lo, hi]) => ({
+            label: hi > 100 ? `${lo}–100%` : `${lo}–${hi}%`,
+            count: people.filter((p) => p.average >= lo && p.average < hi).length
+        }));
+
+        return res.json({
+            ok: true,
+            threshold,
+            certificateThreshold: CERTIFICATE_THRESHOLD,
+            generatedAt: new Date().toISOString(),
+            conductedSessions: Object.fromEntries(TRACK_IDS.map((t) => [t, countedByTrack[t].length])),
+            remainingSessions: remainingByTrack,
+            summary: {
+                total: people.length,
+                eligible: people.filter((p) => p.eligible).length,
+                software: groupSummary('software'),
+                powertrain: groupSummary('powertrain'),
+                combo: {
+                    ...groupSummary('combo'),
+                    bothTracks: combo.filter((p) => p.eligibleTracks.length === 2).length,
+                    softwareOnly: combo.filter((p) => p.split && p.eligibleTracks[0] === 'software').length,
+                    powertrainOnly: combo.filter((p) => p.split && p.eligibleTracks[0] === 'powertrain').length,
+                    neither: combo.filter((p) => p.eligibleTracks.length === 0).length,
+                    eligibleByAverageOneTrackBelow: combo.filter((p) => p.eligible && p.eligibleTracks.length < 2).length,
+                    belowByAverageOneTrackAbove: combo.filter((p) => !p.eligible && p.eligibleTracks.length > 0).length
+                },
+                distribution
+            },
+            people
+        });
+    } catch (err) {
+        console.error('Error computing attendance eligibility:', err);
+        return res.status(500).json({ error: 'Failed to compute attendance eligibility' });
+    }
+});
+
 export default router;
 
 
