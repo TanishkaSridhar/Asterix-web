@@ -103,9 +103,155 @@ const CERT_OUTLOOK = {
     }
 };
 
+/* After the last session: a final verdict, then the expo as the step that earns
+   the certificate. One overall certificate; a combo participant qualifies by
+   clearing either track. */
+function FinalAttendanceCard({ summary }) {
+    const threshold = summary.threshold || 60;
+    const eligible = Boolean(summary.isEligibleForCertificate);
+    const isCombo = summary.perTrack.length > 1;
+    const cleared = summary.perTrack.filter((t) => t.isEligibleForCertificate);
+    const clearedNames = cleared.map((t) => t.trackName).join(' and ');
+
+    const steps = [
+        { label: 'Workshop sessions', state: 'done', detail: 'Completed' },
+        {
+            label: `Attendance ≥ ${threshold}%`,
+            state: eligible ? 'done' : 'failed',
+            detail: eligible ? 'Cleared' : 'Not reached'
+        },
+        {
+            label: 'Take part in the expo',
+            state: eligible ? 'pending' : 'locked',
+            detail: eligible ? 'Dates & teams TBA' : 'Needs eligibility'
+        },
+        { label: 'Workshop certificate', state: eligible ? 'pending' : 'locked', detail: 'After the expo' }
+    ];
+    const stepStyle = {
+        done: 'bg-emerald-300 text-slate-950',
+        failed: 'bg-rose-300 text-slate-950',
+        pending: 'bg-amber-200 text-slate-950',
+        locked: 'bg-slate-200 text-slate-500'
+    };
+    const stepIcon = { done: '✓', failed: '✗', pending: '…', locked: '–' };
+
+    return (
+        <div className="shadow-brutal-4 border-4 border-slate-900 bg-white p-4 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-mono text-sm font-black text-slate-950 uppercase">
+                    📊 Attendance &amp; Certificate
+                </h3>
+                <span className="border-2 border-slate-900 bg-slate-900 px-2 py-1 font-mono text-[10px] font-black text-white uppercase">
+                    {threshold}% required
+                </span>
+            </div>
+
+            {/* Verdict */}
+            <div
+                className={`shadow-brutal-2 mt-4 border-2 border-slate-900 p-4 ${eligible ? 'bg-emerald-200' : 'bg-rose-100'}`}
+            >
+                <span className="font-mono text-[10px] font-black tracking-wider text-slate-700 uppercase">
+                    Workshop sessions are complete
+                </span>
+                <strong className="mt-1 block text-xl font-black text-slate-950 sm:text-2xl">
+                    {eligible
+                        ? '🎉 You are eligible for the certificate!'
+                        : 'You are not eligible for the certificate'}
+                </strong>
+                <p className="mt-2 text-[13px] leading-relaxed font-bold text-slate-800">
+                    {eligible
+                        ? `Your attendance cleared ${threshold}%${isCombo ? ` on ${clearedNames}` : ''}. One last step: take part in the expo to receive your certificate.`
+                        : `Your final attendance is below ${threshold}%${isCombo ? ' on both of your tracks' : ''}, so the workshop certificate cannot be issued. If you believe a session you attended is missing from your record, contact the workshop team.`}
+                </p>
+            </div>
+
+            {/* Steps to the certificate */}
+            <ol className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                {steps.map((step, i) => (
+                    <li
+                        key={step.label}
+                        className={`border-2 border-slate-900 p-2.5 ${stepStyle[step.state]}`}
+                    >
+                        <div className="font-mono text-[10px] font-black uppercase opacity-80">
+                            Step {i + 1} {stepIcon[step.state]}
+                        </div>
+                        <div className="text-[13px] leading-tight font-black">{step.label}</div>
+                        <div className="font-mono text-[11px] font-bold">{step.detail}</div>
+                    </li>
+                ))}
+            </ol>
+
+            {eligible && (
+                <div className="shadow-brutal-2 mt-4 border-2 border-slate-900 bg-amber-100 p-4">
+                    <strong className="block font-mono text-xs font-black text-amber-950 uppercase">
+                        🏁 Final step: the expo
+                    </strong>
+                    <p className="mt-2 text-[13px] leading-relaxed font-bold text-slate-800">
+                        Certificates are given to eligible participants who take part in the workshop expo.
+                        The dates and teams will be announced soon. Keep an eye on this page and the workshop
+                        group.
+                    </p>
+                </div>
+            )}
+
+            <p className="mt-4 font-mono text-[11px] leading-relaxed font-bold text-slate-600">
+                One overall workshop certificate is awarded.
+                {isCombo
+                    ? ` As a combo participant you need ${threshold}% on either one of your tracks. There are no separate track certificates.`
+                    : ''}
+            </p>
+
+            {/* Per-track attendance */}
+            <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {summary.perTrack.map((track) => {
+                    const ok = track.isEligibleForCertificate;
+                    const pct = Math.max(0, Math.min(100, track.attendancePercentage));
+                    return (
+                        <div
+                            key={track.track}
+                            className="shadow-brutal-2 border-2 border-slate-900 bg-slate-50 p-3"
+                        >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                                <span className="font-mono text-[11px] font-black text-slate-700 uppercase">
+                                    {track.trackName}
+                                </span>
+                                <span
+                                    className={`border-2 border-slate-900 px-2 py-0.5 font-mono text-[10px] font-black uppercase ${ok ? 'bg-emerald-300' : 'bg-slate-200 text-slate-700'}`}
+                                >
+                                    {ok ? `✓ Cleared ${threshold}%` : `Below ${threshold}%`}
+                                </span>
+                            </div>
+                            <div className="mt-2 flex items-baseline gap-2">
+                                <strong className="text-3xl font-black text-slate-950">
+                                    {track.attendancePercentage}%
+                                </strong>
+                                <span className="font-mono text-[11px] font-bold text-slate-600">
+                                    {track.totalPresent} of {track.totalConducted} sessions attended
+                                </span>
+                            </div>
+                            <div className="relative mt-2 h-4 border-2 border-slate-900 bg-white">
+                                <div
+                                    className={`h-full ${ok ? 'bg-emerald-400' : 'bg-slate-400'}`}
+                                    style={{ width: `${pct}%` }}
+                                />
+                                <div
+                                    className="absolute top-0 h-full border-l-2 border-dashed border-slate-900"
+                                    style={{ left: `${threshold}%` }}
+                                    title={`${threshold}% threshold`}
+                                />
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 function AttendanceSummaryCard({ summary }) {
     if (!summary || !Array.isArray(summary.perTrack) || summary.perTrack.length === 0) return null;
-    const threshold = summary.threshold || 65;
+    if (summary.sessionsComplete) return <FinalAttendanceCard summary={summary} />;
+    const threshold = summary.threshold || 60;
 
     return (
         <div className="shadow-brutal-4 border-4 border-slate-900 bg-white p-4 sm:p-6">

@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import WorkshopRegistration, { withoutSecrets } from '../models/WorkshopRegistration.js';
 import WorkshopAttendance from '../models/WorkshopAttendance.js';
 import WorkshopSession from '../models/WorkshopSession.js';
-import { summarizeAttendance, CERTIFICATE_THRESHOLD } from '../lib/workshopSessions.js';
+import { summarizeAttendance, CERTIFICATE_THRESHOLD, isOverallEligible } from '../lib/workshopSessions.js';
 import { nextSequence } from '../models/Counter.js';
 import { authenticateToken, requireSuperAdmin, JWT_SECRET } from '../middleware/auth.js';
 import { isMongoConnected } from '../db/mongodb.js';
@@ -1004,7 +1004,8 @@ async function attachAttendance(registrations) {
         const trackList = Object.values(perTrack);
         const present = trackList.reduce((sum, t) => sum + t.totalPresent, 0);
         const conducted = trackList.reduce((sum, t) => sum + t.totalConducted, 0);
-        const isEligible = trackList.length > 0 && trackList.every((t) => t.isEligibleForCertificate);
+        // One overall certificate: a combo candidate qualifies by clearing either track.
+        const isEligible = isOverallEligible(trackList);
 
         reg.attendance = {
             perTrack,

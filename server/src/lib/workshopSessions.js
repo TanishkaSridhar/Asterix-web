@@ -4,9 +4,20 @@ import { WORKSHOP_TRACKS } from '../config/workshopPackages.js';
 import { sessionIsoDate } from '../config/sessionDates.js';
 
 /* Certificate rule: a candidate must reach this share of the sessions actually
-   conducted on a track. Combo candidates are judged per track and earn a
-   certificate for each track they clear on its own. */
-export const CERTIFICATE_THRESHOLD = 65;
+   conducted on a track. There is one overall workshop certificate: a combo
+   candidate qualifies by clearing either of their two tracks. Clearing the bar
+   makes a candidate eligible for the expo; the certificate itself is given for
+   taking part in the expo. */
+export const CERTIFICATE_THRESHOLD = 60;
+
+/* All workshop sessions have been held, so the profile shows a final verdict
+   instead of what is still reachable. Set to false if sessions resume. */
+export const WORKSHOP_SESSIONS_COMPLETE = true;
+
+/* Overall eligibility from per-track summaries: any enrolled track cleared. */
+export function isOverallEligible(trackSummaries) {
+    return trackSummaries.some((t) => t.isEligibleForCertificate);
+}
 
 /* The most sessions a candidate may recover per track by completing make-up
    tasks. Beyond this the gap is a conversation with the workshop team, not a

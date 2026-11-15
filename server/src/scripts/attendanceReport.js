@@ -37,7 +37,7 @@ for (const r of regs) {
   for (const k of [String(r._id), String(r.rollNo).toUpperCase(), String(r.email).toLowerCase()]) for (const a of (byReg.get(k)||[])) seen.set(String(a._id),a);
   const { perTrack } = summarizeAttendance({ sessions, attendanceRecords:[...seen.values()], tracksEnrolled: tracks });
   const all = Object.values(perTrack);
-  const allPass = all.every(t=>t.isEligibleForCertificate);
+  const allPass = all.some(t=>t.isEligibleForCertificate); // one overall certificate: any track cleared
   if (allPass) {
     buckets.pass++;
   } else {

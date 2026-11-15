@@ -24,7 +24,9 @@ import {
     buildSessionIndex,
     resolveSessionKey,
     CERTIFICATE_THRESHOLD,
-    TASK_CREDIT_CAP
+    TASK_CREDIT_CAP,
+    WORKSHOP_SESSIONS_COMPLETE,
+    isOverallEligible
 } from '../lib/workshopSessions.js';
 
 const router = Router();
@@ -1255,9 +1257,8 @@ router.post('/profile', async (req, res) => {
         const attendancePercentage = totalConducted > 0
             ? Math.round((totalPresent / totalConducted) * 100)
             : 0;
-        // Combo candidates earn a certificate per track, so each track is judged alone.
-        const isEligibleForCertificate = trackSummaries.length > 0
-            && trackSummaries.every((t) => t.isEligibleForCertificate);
+        // One overall certificate: a combo candidate qualifies by clearing either track.
+        const isEligibleForCertificate = isOverallEligible(trackSummaries);
 
         // Notes are whatever the workshop team has published from the admin portal; nothing is built in.
         const resources = await WorkshopResource.find({
@@ -1290,14 +1291,15 @@ router.post('/profile', async (req, res) => {
                 attendancePercentage,
                 isEligibleForCertificate,
                 perTrack: trackSummaries,
-                // True when attendance alone can no longer reach the threshold on
-                // some track. Those candidates keep a route to the certificate
-                // through tasks and activities, so the profile says so plainly
-                // rather than reading as a dismissal.
-                needsAlternatePath: trackSummaries.some((t) => t.outlook === 'alternate'),
+                // Sessions are over: the profile shows a final verdict and the expo step.
+                sessionsComplete: WORKSHOP_SESSIONS_COMPLETE,
+                clearedTracks: trackSummaries.filter((t) => t.isEligibleForCertificate).map((t) => t.track),
+                // While sessions run: true when attendance alone can no longer reach the
+                // threshold on any track, so the profile points at the tasks route.
+                needsAlternatePath: !WORKSHOP_SESSIONS_COMPLETE && trackSummaries.every((t) => t.outlook === 'alternate'),
                 certificateMessage: isEligibleForCertificate
-                    ? `On track for your certificate — ${CERTIFICATE_THRESHOLD}% attendance maintained.`
-                    : `Below the ${CERTIFICATE_THRESHOLD}% attendance mark. Your track breakdown below shows exactly what is left.`
+                    ? `Eligible — ${CERTIFICATE_THRESHOLD}% attendance reached. Take part in the expo to receive your certificate.`
+                    : `Below the ${CERTIFICATE_THRESHOLD}% attendance mark.`
             },
             sessionTimeline,
             // Make-up tasks the team has assigned, with the review outcome so the
@@ -2883,9 +2885,9 @@ router.post('/sessions/manual-mark', authenticateToken, async (req, res) => {
 });
 
 /**
- * GET /api/workshop/attendance/eligibility?threshold=75
+ * GET /api/workshop/attendance/eligibility?threshold=60
  * Read-only. Every paid participant's attendance per enrolled track, judged
- * against a threshold the admin picks (default 75). Single-track participants
+ * against a threshold the admin picks (default: the certificate rule). Single-track participants
  * are judged on their track; combo participants are eligible when either of
  * their two tracks clears it, with each track and the average also reported. Uses the same
  * session matching as the participant profile, so the numbers agree with it.
@@ -2893,7 +2895,7 @@ router.post('/sessions/manual-mark', authenticateToken, async (req, res) => {
 router.get('/eligibility', authenticateToken, async (req, res) => {
     try {
         const requested = Number(req.query.threshold);
-        const threshold = Number.isFinite(requested) && requested > 0 && requested <= 100 ? requested : 75;
+        const threshold = Number.isFinite(requested) && requested > 0 && requested <= 100 ? requested : CERTIFICATE_THRESHOLD;
 
         const [registrations, sessions, records] = await Promise.all([
             WorkshopRegistration.find({ status: 'paid' })
@@ -2969,7 +2971,8 @@ router.get('/eligibility', authenticateToken, async (req, res) => {
                     conducted: summary.totalConducted,
                     missed: summary.totalConducted - summary.totalPresent,
                     percentage,
-                    eligible: summary.totalConducted > 0 && percentage >= threshold,
+                    // Whole-number percentage, the same figure and rule the student profile uses.
+                    eligible: summary.totalConducted > 0 && summary.attendancePercentage >= threshold,
                     missedInARow,
                     lastAttended: last,
                     sessionsToReach: sessionsToReach(summary.totalPresent, summary.totalConducted),

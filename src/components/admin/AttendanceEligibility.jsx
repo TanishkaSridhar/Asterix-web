@@ -91,7 +91,7 @@ function deriveAt(raw, threshold) {
                 k,
                 {
                     ...r,
-                    eligible: r.conducted > 0 && r.percentage >= threshold,
+                    eligible: r.conducted > 0 && Math.round((r.present / r.conducted) * 100) >= threshold,
                     sessionsToReach: toReach(r.present, r.conducted)
                 }
             ])
@@ -159,8 +159,8 @@ function deriveAt(raw, threshold) {
 const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
 export default function AttendanceEligibility() {
-    const [threshold, setThreshold] = useState(75);
-    const [draft, setDraft] = useState('75');
+    const [threshold, setThreshold] = useState(60);
+    const [draft, setDraft] = useState('60');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [group, setGroup] = useState('all');
@@ -175,7 +175,7 @@ export default function AttendanceEligibility() {
         setLoading(true);
         setError('');
         try {
-            setRaw(await fetchEligibility(75));
+            setRaw(await fetchEligibility(60));
         } catch (err) {
             setError(err.message);
         } finally {
@@ -324,7 +324,7 @@ export default function AttendanceEligibility() {
                         aria-label="Eligibility threshold"
                     />
                     <div className="flex flex-wrap gap-1.5">
-                        {[50, 60, 65, 70, 75, 80, 85, 90].map((n) => (
+                        {[50, 55, 60, 65, 70, 75, 80, 90].map((n) => (
                             <button
                                 key={n}
                                 type="button"
