@@ -513,7 +513,7 @@ export default function AttendanceEligibility() {
                                     <th className="px-2 py-2">Group</th>
                                     <th className="px-2 py-2">Software</th>
                                     <th className="px-2 py-2">Powertrain</th>
-                                    <th className="px-2 py-2">Average</th>
+                                    <th className="px-2 py-2">Best Track</th>
                                     <th className="px-2 py-2">Missed in a row</th>
                                     <th className="px-2 py-2">Last seen</th>
                                     <th className="px-2 py-2">Phone</th>
@@ -554,9 +554,14 @@ export default function AttendanceEligibility() {
                                             <TrackCell row={p.perTrack.powertrain} threshold={threshold} />
                                         </td>
                                         <td className="px-2 py-1.5">
-                                            <span className={`font-black ${pctTone(p.average, threshold)}`}>
-                                                {p.average}%
+                                            <span className={`font-black ${pctTone(p.best, threshold)}`}>
+                                                {p.best}%
                                             </span>
+                                            {p.group === 'combo' && (
+                                                <div className="text-[10px] text-slate-500 font-bold">
+                                                    avg {p.average}%
+                                                </div>
+                                            )}
                                             <div className="text-[10px] font-bold">
                                                 {p.eligible ? (
                                                     <span className="text-emerald-700">eligible</span>
