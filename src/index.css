@@ -769,3 +769,52 @@ html.modal-open body {
   }
 }
 
+
+/* Horizon tab: polished gold with a light sweeping across it. */
+.horizon-gleam {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    background: linear-gradient(135deg, #a8741a 0%, #e9b949 22%, #fff1a8 45%, #f4c430 60%, #c8901e 82%, #a8741a 100%);
+    background-size: 220% 220%;
+    animation: horizon-gold-shift 6s ease-in-out infinite;
+    text-shadow: 0 1px 0 rgb(255 248 205 / 0.7);
+}
+.horizon-gleam::after {
+    content: '';
+    position: absolute;
+    inset: -20% auto -20% -60%;
+    width: 45%;
+    z-index: -1;
+    background: linear-gradient(100deg, transparent 0%, rgb(255 255 255 / 0.85) 50%, transparent 100%);
+    transform: skewX(-20deg);
+    animation: horizon-gleam-sweep 3.2s ease-in-out infinite;
+    pointer-events: none;
+}
+.horizon-gleam:hover {
+    filter: brightness(1.08) saturate(1.1);
+}
+@keyframes horizon-gold-shift {
+    0%,
+    100% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+}
+@keyframes horizon-gleam-sweep {
+    0% {
+        left: -60%;
+    }
+    55%,
+    100% {
+        left: 130%;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .horizon-gleam,
+    .horizon-gleam::after {
+        animation: none;
+    }
+}

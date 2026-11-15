@@ -15,6 +15,7 @@ import imgLidar from '../assets/gallery/03_lidar_sensor_tuning.jpg';
 import imgTrack from '../assets/gallery/04_track_dirt_action.jpg';
 import imgMechanics from '../assets/gallery/05_pitlane_mechanics.jpg';
 import imgCelebration from '../assets/gallery/06_team_celebration.jpg';
+import { OFFICIAL_CONTACT } from '../config/officialContact';
 
 const LOCAL_STORAGE_KEY = 'asterix_website_data_v2';
 export const AUTH_SESSION_KEY = 'asterix_admin_session_v1';
@@ -167,9 +168,9 @@ const initialContactInfo = {
     phone: '+91 86089 44644',
     address: 'PSG iTech, Neelambur, Coimbatore, Tamil Nadu',
     category: 'Autonomous All-Terrain Vehicle Development',
-    instagramUrl: 'https://www.instagram.com/asterix_itech/',
-    linkedinUrl: 'https://www.linkedin.com/company/teamasterix/',
-    githubUrl: 'https://github.com/Team-Asterix264016/'
+    instagramUrl: OFFICIAL_CONTACT.instagramUrl,
+    linkedinUrl: OFFICIAL_CONTACT.linkedinUrl,
+    githubUrl: OFFICIAL_CONTACT.githubUrl
 };
 
 /* Roster of admin accounts, for display in the Team Accounts tab only.

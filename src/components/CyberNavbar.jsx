@@ -3,6 +3,7 @@ import teamLogo from '../assets/Screenshot 2026-08-26 232320.png';
 import TextDock, { DockTextItem } from './Dock';
 import { useWebsiteData } from '../context/WebsiteDataContext';
 import Icon from './Icon';
+import { socialUrl, contactEmail } from '../config/officialContact';
 
 export default function CyberNavbar({
     onSelectSubsystem,
@@ -72,7 +73,7 @@ export default function CyberNavbar({
         {
             name: 'Instagram',
             handle: '@asterix_itech',
-            url: contact.instagramUrl || 'https://www.instagram.com/asterix_itech/',
+            url: socialUrl(contact, 'instagramUrl'),
             color: 'hover:bg-pink-50 hover:text-pink-600',
             icon: (
                 <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
@@ -83,7 +84,7 @@ export default function CyberNavbar({
         {
             name: 'LinkedIn',
             handle: 'Team Asterix',
-            url: 'https://www.linkedin.com/company/teamasterix/',
+            url: socialUrl(contact, 'linkedinUrl'),
             color: 'hover:bg-blue-50 hover:text-blue-600',
             icon: (
                 <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
@@ -94,7 +95,7 @@ export default function CyberNavbar({
         {
             name: 'GitHub',
             handle: 'Team-Asterix264016',
-            url: contact.githubUrl || 'https://github.com/Team-Asterix264016/',
+            url: socialUrl(contact, 'githubUrl'),
             color: 'hover:bg-slate-100 hover:text-slate-950',
             icon: (
                 <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
@@ -299,14 +300,14 @@ export default function CyberNavbar({
                                                         <span className="tracking-wide">+91 86089 44644</span>
                                                     </a>
                                                     <a
-                                                        href={`mailto:${contact.email || 'asterix@psgitech.ac.in'}`}
+                                                        href={`mailto:${contactEmail(contact)}`}
                                                         className="press group flex items-center gap-2.5 rounded-md border-2 border-slate-900 bg-sky-50 p-2 font-mono text-xs font-bold text-slate-900 no-underline hover:bg-sky-200"
                                                     >
                                                         <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center border-2 border-slate-900 bg-sky-300">
                                                             <Icon name="mail" className="h-3.5 w-3.5" />
                                                         </span>
                                                         <span className="truncate">
-                                                            {contact.email || 'asterix@psgitech.ac.in'}
+                                                            {contactEmail(contact)}
                                                         </span>
                                                     </a>
                                                 </div>
@@ -331,7 +332,7 @@ export default function CyberNavbar({
                                                 : 'shadow-brutal-2 hover:shadow-brutal-3 border-2 px-3.5 py-1.5 text-xs'
                                         }`}
                                     >
-                                        <span>PROFILE 🔓</span>
+                                        <span>PROFILE</span>
                                     </DockTextItem>
 
                                     {/* Community Button */}
@@ -341,18 +342,15 @@ export default function CyberNavbar({
                                             if (onOpenCommunity) onOpenCommunity();
                                             else window.location.hash = '#community';
                                         }}
-                                        className={`cursor-pointer border-slate-900 ${
-                                            currentPage === 'community'
-                                                ? 'bg-emerald-400 font-black text-slate-900 shadow-[inset_2px_2px_0px_#000]'
-                                                : 'bg-emerald-300 font-black text-slate-900 hover:bg-emerald-400'
+                                        className={`horizon-gleam cursor-pointer border-slate-900 font-black text-amber-950 ${
+                                            currentPage === 'community' ? 'shadow-[inset_2px_2px_0px_#000]' : ''
                                         } ${
                                             isScrolled
                                                 ? 'hover:shadow-brutal-2 rounded-md border px-2.5 py-1 text-[11px]'
                                                 : 'shadow-brutal-2 hover:shadow-brutal-3 border-2 px-3.5 py-1.5 text-xs'
                                         }`}
                                     >
-                                        <span>COMMUNITY</span>
-                                        <span className="text-[9px]">💬</span>
+                                        <span>HORIZON</span>
                                     </DockTextItem>
 
                                     {/* Sponsor Team Button */}
@@ -514,14 +512,14 @@ export default function CyberNavbar({
                                         <span>+91 86089 44644</span>
                                     </a>
                                     <a
-                                        href={`mailto:${contact.email || 'asterix@psgitech.ac.in'}`}
+                                        href={`mailto:${contactEmail(contact)}`}
                                         className="flex items-center gap-2 truncate border-2 border-slate-900 bg-sky-50 p-2 font-mono text-xs font-bold text-slate-900"
                                     >
                                         <span className="flex h-5 w-5 items-center justify-center border border-slate-900 bg-sky-300">
                                             <Icon name="mail" className="h-3 w-3" />
                                         </span>
                                         <span className="truncate">
-                                            {contact.email || 'asterix@psgitech.ac.in'}
+                                            {contactEmail(contact)}
                                         </span>
                                     </a>
                                 </div>
@@ -538,7 +536,7 @@ export default function CyberNavbar({
                                 }}
                                 className="shadow-brutal-2 tap flex w-full cursor-pointer items-center justify-center gap-1.5 border-2 border-slate-900 bg-purple-300 p-2.5 text-center text-xs font-black text-slate-900 uppercase hover:bg-purple-400"
                             >
-                                <span>My Profile & Notes 🔓</span>
+                                <span>My Profile & Notes</span>
                             </button>
                             <button
                                 onClick={() => {
@@ -546,10 +544,9 @@ export default function CyberNavbar({
                                     if (onOpenCommunity) onOpenCommunity();
                                     else window.location.hash = '#community';
                                 }}
-                                className="shadow-brutal-2 tap flex w-full cursor-pointer items-center justify-center gap-1.5 border-2 border-slate-900 bg-emerald-300 p-2.5 text-center text-xs font-black text-slate-900 uppercase hover:bg-emerald-400"
+                                className="horizon-gleam shadow-brutal-2 tap flex w-full cursor-pointer items-center justify-center gap-1.5 border-2 border-slate-900 p-2.5 text-center text-xs font-black text-amber-950 uppercase"
                             >
-                                <span>Community & Horizon</span>
-                                <span>💬</span>
+                                <span>Horizon</span>
                             </button>
                             <button
                                 onClick={() => {

@@ -1,6 +1,7 @@
 import teamLogo from '../assets/Screenshot 2026-08-26 232320.png';
 import { useWebsiteData } from '../context/WebsiteDataContext';
 import Icon from './Icon';
+import { socialUrl, contactEmail } from '../config/officialContact';
 
 export default function CyberFooter({ onOpenAdmin, onOpenSponsor, onOpenWorkshop }) {
     const { siteData } = useWebsiteData();
@@ -52,21 +53,19 @@ export default function CyberFooter({ onOpenAdmin, onOpenSponsor, onOpenWorkshop
                                 {
                                     name: 'INSTAGRAM',
                                     emoji: '📸',
-                                    url: contact.instagramUrl || 'https://www.instagram.com/asterix_itech/',
+                                    url: socialUrl(contact, 'instagramUrl'),
                                     color: 'hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-500 hover:text-white hover:border-pink-600'
                                 },
                                 {
                                     name: 'LINKEDIN',
                                     emoji: '💼',
-                                    url:
-                                        contact.linkedinUrl ||
-                                        'https://www.linkedin.com/company/teamasterix/',
+                                    url: socialUrl(contact, 'linkedinUrl'),
                                     color: 'hover:bg-sky-600 hover:text-white hover:border-sky-700'
                                 },
                                 {
                                     name: 'GITHUB',
                                     emoji: '💻',
-                                    url: contact.githubUrl || 'https://github.com/Team-Asterix264016/',
+                                    url: socialUrl(contact, 'githubUrl'),
                                     color: 'hover:bg-slate-950 hover:text-white hover:border-slate-950'
                                 }
                             ].map((net) => (
@@ -103,14 +102,14 @@ export default function CyberFooter({ onOpenAdmin, onOpenSponsor, onOpenWorkshop
                             </a>
 
                             <a
-                                href={`mailto:${contact.email || 'asterix@psgitech.ac.in'}`}
+                                href={`mailto:${contactEmail(contact)}`}
                                 className="press shadow-brutal-2 flex cursor-pointer items-center gap-2 rounded-lg border-2 border-slate-900 bg-white p-2 font-bold text-slate-800 transition-colors hover:border-sky-600 hover:bg-sky-50"
                             >
                                 <span className="flex flex-shrink-0 items-center justify-center rounded border border-slate-900 bg-sky-100 p-1 text-slate-900">
                                     <Icon name="mail" className="h-3.5 w-3.5" />
                                 </span>
                                 <span className="truncate text-[11px]">
-                                    {contact.email || 'asterix@psgitech.ac.in'}
+                                    {contactEmail(contact)}
                                 </span>
                             </a>
 

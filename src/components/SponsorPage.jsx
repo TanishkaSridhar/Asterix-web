@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useWebsiteData } from '../context/WebsiteDataContext';
 import { apiUrl } from '../lib/api';
+import { contactEmail } from '../config/officialContact';
 
 export default function SponsorPage({ onBack }) {
     useEffect(() => {
@@ -617,7 +618,7 @@ PSG iTech Autonomous Mobility Cell
                             Direct Communications
                         </h4>
                         <div className="space-y-1 font-mono text-xs text-slate-300">
-                            <p>✉ {contact.email || 'asterix@psgitech.ac.in'}</p>
+                            <p>✉ {contactEmail(contact)}</p>
                             <p>📞 {contact.phone || '+91 86089 44644'}</p>
                         </div>
                     </div>
