@@ -4,8 +4,8 @@ import { AUTH_TOKEN_KEY } from '../../context/WebsiteDataContext';
 
 /* Who is above or below an attendance threshold, per track and overall.
    Single-track participants are judged on their own track. Combo participants
-   are judged on the average of their two track percentages, and each track is
-   still shown on its own so a split (clears one, misses the other) is visible.
+   are eligible when either track clears the threshold; each track and the
+   average are still shown so a split (clears one, misses the other) is visible.
    Read-only: nothing here writes to the database. */
 
 const GROUPS = [
@@ -75,35 +75,119 @@ function Stat({ label, value, sub, tone = 'bg-white' }) {
     );
 }
 
+/* Applies a threshold to the per-track counts the server sent. Mirrors the
+   server's rules: a track is cleared at >= threshold, a participant is eligible
+   when any enrolled track is cleared (for combo: either one). */
+function deriveAt(raw, threshold) {
+    const t = threshold / 100;
+    const toReach = (present, conducted) => {
+        if (conducted === 0 || present / conducted >= t) return 0;
+        if (t >= 1) return null;
+        return Math.ceil((t * conducted - present) / (1 - t));
+    };
+    const people = raw.people.map((p) => {
+        const perTrack = Object.fromEntries(
+            Object.entries(p.perTrack).map(([k, r]) => [
+                k,
+                {
+                    ...r,
+                    eligible: r.conducted > 0 && r.percentage >= threshold,
+                    sessionsToReach: toReach(r.present, r.conducted)
+                }
+            ])
+        );
+        const rows = Object.values(perTrack);
+        const eligibleTracks = p.tracks.filter((k) => perTrack[k]?.eligible);
+        return {
+            ...p,
+            perTrack,
+            eligibleTracks,
+            eligible: eligibleTracks.length > 0,
+            split: p.group === 'combo' && eligibleTracks.length === 1,
+            canStillReach: rows.some((r) => r.maxPossible >= threshold)
+        };
+    });
+
+    const groupSummary = (group) => {
+        const list = people.filter((p) => p.group === group);
+        return {
+            total: list.length,
+            eligible: list.filter((p) => p.eligible).length,
+            below: list.filter((p) => !p.eligible).length,
+            neverAttended: list.filter((p) => p.neverAttended).length,
+            cannotReach: list.filter((p) => !p.eligible && !p.canStillReach).length
+        };
+    };
+    const combo = people.filter((p) => p.group === 'combo');
+    // Buckets split at the threshold, so the bars read as below / above the line.
+    const edges = [
+        ...new Set([0, 25, 50, threshold - 10, threshold, threshold + 15 < 100 ? threshold + 15 : -1, 101])
+    ]
+        .filter((e) => e >= 0 && e <= 101)
+        .sort((a, b) => a - b);
+    const distribution = edges.slice(0, -1).map((lo, i) => {
+        const hi = edges[i + 1];
+        return {
+            label: hi > 100 ? `${lo}–100%` : `${lo}–${hi}%`,
+            above: lo >= threshold,
+            count: people.filter((p) => p.best >= lo && p.best < hi).length
+        };
+    });
+
+    return {
+        ...raw,
+        threshold,
+        people,
+        summary: {
+            total: people.length,
+            eligible: people.filter((p) => p.eligible).length,
+            software: groupSummary('software'),
+            powertrain: groupSummary('powertrain'),
+            combo: {
+                ...groupSummary('combo'),
+                bothTracks: combo.filter((p) => p.eligibleTracks.length === 2).length,
+                softwareOnly: combo.filter((p) => p.split && p.eligibleTracks[0] === 'software').length,
+                powertrainOnly: combo.filter((p) => p.split && p.eligibleTracks[0] === 'powertrain').length,
+                neither: combo.filter((p) => p.eligibleTracks.length === 0).length,
+                eligibleWithAverageBelow: combo.filter((p) => p.eligible && p.average < threshold).length
+            },
+            distribution
+        }
+    };
+}
+
 const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
-export default function AttendanceEligibility({ showStatus }) {
+export default function AttendanceEligibility() {
     const [threshold, setThreshold] = useState(75);
     const [draft, setDraft] = useState('75');
-    const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [group, setGroup] = useState('all');
     const [view, setView] = useState('below');
     const [search, setSearch] = useState('');
     const [department, setDepartment] = useState('');
-    const [sort, setSort] = useState('average');
+    const [sort, setSort] = useState('best');
 
+    // Fetched once; the threshold is applied in the browser, so moving it is instant.
+    const [raw, setRaw] = useState(null);
     const load = useCallback(async () => {
         setLoading(true);
         setError('');
         try {
-            setData(await fetchEligibility(threshold));
+            setRaw(await fetchEligibility(75));
         } catch (err) {
             setError(err.message);
         } finally {
             setLoading(false);
         }
-    }, [threshold]);
+    }, []);
 
     useEffect(() => {
         load();
     }, [load]);
+
+    const data = useMemo(() => (raw ? deriveAt(raw, threshold) : null), [raw, threshold]);
 
     const departments = useMemo(
         () => [...new Set((data?.people || []).map((p) => p.department).filter(Boolean))].sort(),
@@ -124,6 +208,7 @@ export default function AttendanceEligibility({ showStatus }) {
             return true;
         });
         const sorters = {
+            best: (a, b) => a.best - b.best,
             average: (a, b) => a.average - b.average,
             software: (a, b) =>
                 (a.perTrack.software?.percentage ?? 999) - (b.perTrack.software?.percentage ?? 999),
@@ -137,14 +222,10 @@ export default function AttendanceEligibility({ showStatus }) {
         return list.sort(sorters[sort]);
     }, [data, group, view, search, department, sort]);
 
-    const applyThreshold = (e) => {
-        e.preventDefault();
-        const n = Number(draft);
-        if (!Number.isFinite(n) || n <= 0 || n > 100) {
-            showStatus?.('Threshold must be between 1 and 100.', 'error');
-            return;
-        }
-        setThreshold(n);
+    const setThresholdFrom = (value) => {
+        setDraft(String(value));
+        const n = Number(value);
+        if (value !== '' && Number.isFinite(n) && n >= 1 && n <= 100) setThreshold(n);
     };
 
     const exportCsv = () => {
@@ -163,6 +244,7 @@ export default function AttendanceEligibility({ showStatus }) {
             'Powertrain present',
             'Powertrain conducted',
             'Average %',
+            'Best track %',
             `Eligible (>= ${threshold}%)`,
             'Tracks cleared',
             'Can still reach',
@@ -186,6 +268,7 @@ export default function AttendanceEligibility({ showStatus }) {
                 pt?.present ?? '',
                 pt?.conducted ?? '',
                 p.average,
+                p.best,
                 p.eligible ? 'Yes' : 'No',
                 p.eligibleTracks.join(' + '),
                 p.eligible ? '' : p.canStillReach ? 'Yes' : 'No',
@@ -209,31 +292,52 @@ export default function AttendanceEligibility({ showStatus }) {
         <div className="space-y-4">
             {/* Threshold bar */}
             <div className="shadow-brutal-3 flex flex-col gap-3 border-2 border-slate-900 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <form onSubmit={applyThreshold} className="flex flex-wrap items-center gap-2 text-xs">
-                    <label className="font-black text-slate-700 uppercase">Eligibility threshold</label>
+                <div className="flex min-w-0 flex-col gap-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <label className="font-black text-slate-700 uppercase">Eligibility threshold</label>
+                        <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={draft}
+                            onChange={(e) => setThresholdFrom(e.target.value)}
+                            onBlur={() => setDraft(String(threshold))}
+                            className="w-20 border-2 border-slate-900 bg-white px-2 py-1 font-black"
+                        />
+                        <span className="font-black">%</span>
+                        <button
+                            type="button"
+                            onClick={load}
+                            className="press cursor-pointer border-2 border-slate-900 bg-white px-3 py-1 font-black uppercase"
+                        >
+                            {loading ? 'Loading…' : '↻ Refresh data'}
+                        </button>
+                    </div>
                     <input
-                        type="number"
-                        min="1"
+                        type="range"
+                        min="40"
                         max="100"
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        className="w-20 border-2 border-slate-900 bg-white px-2 py-1 font-black"
+                        step="1"
+                        value={threshold}
+                        onChange={(e) => setThresholdFrom(e.target.value)}
+                        className="w-full max-w-md accent-slate-900"
+                        aria-label="Eligibility threshold"
                     />
-                    <span className="font-black">%</span>
-                    <button
-                        type="submit"
-                        className="press cursor-pointer border-2 border-slate-900 bg-slate-900 px-3 py-1 font-black text-white uppercase"
-                    >
-                        Apply
-                    </button>
-                    <button
-                        type="button"
-                        onClick={load}
-                        className="press cursor-pointer border-2 border-slate-900 bg-white px-3 py-1 font-black uppercase"
-                    >
-                        {loading ? 'Loading…' : '↻ Refresh'}
-                    </button>
-                </form>
+                    <div className="flex flex-wrap gap-1.5">
+                        {[50, 60, 65, 70, 75, 80, 85, 90].map((n) => (
+                            <button
+                                key={n}
+                                type="button"
+                                onClick={() => setThresholdFrom(n)}
+                                className={`press cursor-pointer border-2 border-slate-900 px-2 py-0.5 text-[11px] font-black ${
+                                    threshold === n ? 'bg-slate-900 text-white' : 'bg-white'
+                                }`}
+                            >
+                                {n}%{data && n === data.certificateThreshold ? ' (cert rule)' : ''}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 {data && (
                     <div className="text-[11px] font-bold text-slate-600">
                         Counted sessions so far: Software {data.conductedSessions.software} · Powertrain{' '}
@@ -268,7 +372,7 @@ export default function AttendanceEligibility({ showStatus }) {
                         {['software', 'powertrain', 'combo'].map((g) => (
                             <Stat
                                 key={g}
-                                label={g === 'combo' ? 'Combo (by average)' : `${g} only`}
+                                label={g === 'combo' ? 'Combo (either track)' : `${g} only`}
                                 value={`${s[g].eligible} / ${s[g].total}`}
                                 sub={`${s[g].below} below · ${s[g].cannotReach} can't reach anymore`}
                                 tone={GROUP_STYLE[g].split(' ')[1]}
@@ -297,19 +401,15 @@ export default function AttendanceEligibility({ showStatus }) {
                                     one track but not the other.
                                 </li>
                                 <li>
-                                    {s.combo.eligibleByAverageOneTrackBelow} are eligible by average even
-                                    though one track is below {threshold}%.
-                                </li>
-                                <li>
-                                    {s.combo.belowByAverageOneTrackAbove} clear one track but their average is
-                                    still below {threshold}%.
+                                    {s.combo.eligibleWithAverageBelow} of the eligible combo participants have
+                                    an average below {threshold}%.
                                 </li>
                             </ul>
                         </div>
 
                         <div className="border-2 border-slate-900 bg-white p-3">
                             <div className="mb-2 text-[10px] font-black tracking-wider text-slate-700 uppercase">
-                                Spread of attendance (average for combo)
+                                Spread of attendance (better track for combo)
                             </div>
                             <div className="space-y-1">
                                 {s.distribution.map((b) => (
@@ -320,7 +420,7 @@ export default function AttendanceEligibility({ showStatus }) {
                                         <span className="w-16 shrink-0 text-slate-600">{b.label}</span>
                                         <div className="h-4 flex-1 bg-slate-100">
                                             <div
-                                                className="h-4 bg-slate-800"
+                                                className={`h-4 ${b.above ? 'bg-emerald-600' : 'bg-rose-500'}`}
                                                 style={{ width: `${(b.count / maxBucket) * 100}%` }}
                                             />
                                         </div>
@@ -384,6 +484,7 @@ export default function AttendanceEligibility({ showStatus }) {
                                 onChange={(e) => setSort(e.target.value)}
                                 className="border-2 border-slate-900 bg-white px-2 py-1 font-bold"
                             >
+                                <option value="best">Sort: lowest best track</option>
                                 <option value="average">Sort: lowest average</option>
                                 <option value="software">Sort: lowest software</option>
                                 <option value="powertrain">Sort: lowest powertrain</option>

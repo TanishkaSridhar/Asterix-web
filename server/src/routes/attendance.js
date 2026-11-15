@@ -2886,8 +2886,8 @@ router.post('/sessions/manual-mark', authenticateToken, async (req, res) => {
  * GET /api/workshop/attendance/eligibility?threshold=75
  * Read-only. Every paid participant's attendance per enrolled track, judged
  * against a threshold the admin picks (default 75). Single-track participants
- * are judged on their track; combo participants on the average of their two
- * track percentages, with each track also reported on its own. Uses the same
+ * are judged on their track; combo participants are eligible when either of
+ * their two tracks clears it, with each track and the average also reported. Uses the same
  * session matching as the participant profile, so the numbers agree with it.
  */
 router.get('/eligibility', authenticateToken, async (req, res) => {
@@ -2997,14 +2997,17 @@ router.get('/eligibility', authenticateToken, async (req, res) => {
                 tracks,
                 perTrack: trackRows,
                 average,
-                eligible: rows.some((r) => r.conducted > 0) && average >= threshold,
+                // Eligible when any enrolled track clears the threshold (for combo: either one).
+                eligible: eligibleTracks.length > 0,
+                // The figure eligibility is judged on: the track itself, or a combo's better track.
+                best: rows.length ? Math.max(...rows.map((r) => r.percentage)) : 0,
                 eligibleTracks,
                 // Combo only: clears the bar on exactly one of the two tracks.
                 split: group === 'combo' && eligibleTracks.length === 1,
                 neverAttended: attendanceRecords.length === 0,
                 lastSeen,
-                // Average of each track's best case if every remaining session is attended.
-                canStillReach: rows.length > 0 && rows.reduce((sum, r) => sum + r.maxPossible, 0) / rows.length >= threshold
+                // Some track can still clear the threshold if every remaining session is attended.
+                canStillReach: rows.some((r) => r.maxPossible >= threshold)
             };
         });
 
@@ -3021,7 +3024,7 @@ router.get('/eligibility', authenticateToken, async (req, res) => {
         const combo = people.filter((p) => p.group === 'combo');
         const distribution = [[0, 25], [25, 50], [50, 65], [65, 75], [75, 90], [90, 101]].map(([lo, hi]) => ({
             label: hi > 100 ? `${lo}–100%` : `${lo}–${hi}%`,
-            count: people.filter((p) => p.average >= lo && p.average < hi).length
+            count: people.filter((p) => p.best >= lo && p.best < hi).length
         }));
 
         return res.json({
@@ -3042,8 +3045,7 @@ router.get('/eligibility', authenticateToken, async (req, res) => {
                     softwareOnly: combo.filter((p) => p.split && p.eligibleTracks[0] === 'software').length,
                     powertrainOnly: combo.filter((p) => p.split && p.eligibleTracks[0] === 'powertrain').length,
                     neither: combo.filter((p) => p.eligibleTracks.length === 0).length,
-                    eligibleByAverageOneTrackBelow: combo.filter((p) => p.eligible && p.eligibleTracks.length < 2).length,
-                    belowByAverageOneTrackAbove: combo.filter((p) => !p.eligible && p.eligibleTracks.length > 0).length
+                    eligibleWithAverageBelow: combo.filter((p) => p.eligible && p.average < threshold).length
                 },
                 distribution
             },
